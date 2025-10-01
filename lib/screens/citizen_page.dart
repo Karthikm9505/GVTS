@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 
 class CitizenPage extends StatefulWidget {
   const CitizenPage({super.key});
@@ -49,6 +50,7 @@ class _CitizenPageState extends State<CitizenPage> {
             (data["lng"] as num).toDouble(),
           );
         });
+        _evaluateProximity();
       }
     });
   }
@@ -57,32 +59,43 @@ class _CitizenPageState extends State<CitizenPage> {
     FirebaseDatabase.instance.ref("vehicles").onValue.listen((event) {
       final data = event.snapshot.value as Map<dynamic, dynamic>?;
 
-      if (data != null && citizenLocation != null) {
+      if (data != null) {
         data.forEach((key, value) {
           if (value["location"] != null) {
             final lat = (value["location"]["lat"] as num).toDouble();
             final lng = (value["location"]["lng"] as num).toDouble();
-            vehicleLocation = LatLng(lat, lng);
-
-            final distance = _calculateDistance(
-              citizenLocation!.latitude,
-              citizenLocation!.longitude,
-              vehicleLocation!.latitude,
-              vehicleLocation!.longitude,
-            );
-
-            if (distance <= 0.3 && !notificationSent) {
-              _showNotification(key.toString(), distance);
-              notificationSent = true;
-            }
+            setState(() {
+              vehicleLocation = LatLng(lat, lng);
+            });
+            _evaluateProximity(vehicleId: key.toString());
           }
         });
       }
     });
   }
 
+  void _evaluateProximity({String? vehicleId}) {
+    if (citizenLocation == null || vehicleLocation == null) {
+      return;
+    }
+
+    final distance = _calculateDistance(
+      citizenLocation!.latitude,
+      citizenLocation!.longitude,
+      vehicleLocation!.latitude,
+      vehicleLocation!.longitude,
+    );
+
+    if (distance <= 100 && !notificationSent) {
+      _showNotification(vehicleId ?? 'Vehicle', distance);
+      notificationSent = true;
+    } else if (distance > 100) {
+      notificationSent = false;
+    }
+  }
+
   double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-    return Geolocator.distanceBetween(lat1, lon1, lat2, lon2) / 1000;
+    return Geolocator.distanceBetween(lat1, lon1, lat2, lon2);
   }
 
   Future<void> _showNotification(String vehicleId, double distance) async {
@@ -98,26 +111,99 @@ class _CitizenPageState extends State<CitizenPage> {
     await _notifications.show(
       0,
       'Garbage Truck Nearby',
-      'Truck $vehicleId is ${(distance * 1000).toStringAsFixed(0)} meters away!',
+      'Truck $vehicleId is ${distance.toStringAsFixed(0)} meters away!',
       details,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final citizen = citizenLocation;
+    final vehicle = vehicleLocation;
+    final distance = (citizen != null && vehicle != null)
+        ? _calculateDistance(
+            citizen.latitude,
+            citizen.longitude,
+            vehicle.latitude,
+            vehicle.longitude,
+          )
+        : null;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Citizen Page"),
       ),
-      body: Center(
-        child: citizenLocation == null
-            ? const CircularProgressIndicator()
-            : Text(
-          "Citizen Location: ${citizenLocation!.latitude}, ${citizenLocation!.longitude}\n"
-              "Vehicle Location: ${vehicleLocation?.latitude}, ${vehicleLocation?.longitude}",
-          textAlign: TextAlign.center,
-        ),
-      ),
+      body: citizen == null
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                Expanded(
+                  child: FlutterMap(
+                    options: MapOptions(
+                      initialCenter: citizen,
+                      initialZoom: 15,
+                    ),
+                    children: [
+                      TileLayer(
+                        urlTemplate:
+                            "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                        userAgentPackageName: 'com.example.gvts',
+                      ),
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            width: 40,
+                            height: 40,
+                            point: citizen,
+                            child: const Icon(
+                              Icons.person_pin_circle,
+                              color: Colors.blue,
+                              size: 36,
+                            ),
+                          ),
+                          if (vehicle != null)
+                            Marker(
+                              width: 40,
+                              height: 40,
+                              point: vehicle,
+                              child: const Icon(
+                                Icons.local_shipping,
+                                color: Colors.green,
+                                size: 36,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Citizen Location: ${citizen.latitude.toStringAsFixed(5)}, "
+                        "${citizen.longitude.toStringAsFixed(5)}",
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        vehicle == null
+                            ? "Waiting for vehicle location..."
+                            : "Vehicle Location: ${vehicle.latitude.toStringAsFixed(5)}, "
+                                "${vehicle.longitude.toStringAsFixed(5)}",
+                      ),
+                      if (distance != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          "Distance: ${distance.toStringAsFixed(0)} meters",
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
     );
   }
 }
