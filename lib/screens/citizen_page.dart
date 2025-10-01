@@ -16,7 +16,8 @@ class _CitizenPageState extends State<CitizenPage> {
   FlutterLocalNotificationsPlugin();
 
   LatLng? citizenLocation;
-  LatLng? vehicleLocation;
+  String? _latestVehicleId;
+  LatLng? _latestVehicleLocation;
   bool notificationSent = false;
 
   @override
@@ -49,6 +50,7 @@ class _CitizenPageState extends State<CitizenPage> {
             (data["lng"] as num).toDouble(),
           );
         });
+        _evaluateProximity();
       }
     });
   }
@@ -57,28 +59,42 @@ class _CitizenPageState extends State<CitizenPage> {
     FirebaseDatabase.instance.ref("vehicles").onValue.listen((event) {
       final data = event.snapshot.value as Map<dynamic, dynamic>?;
 
-      if (data != null && citizenLocation != null) {
+      if (data != null) {
         data.forEach((key, value) {
           if (value["location"] != null) {
             final lat = (value["location"]["lat"] as num).toDouble();
             final lng = (value["location"]["lng"] as num).toDouble();
-            vehicleLocation = LatLng(lat, lng);
-
-            final distance = _calculateDistance(
-              citizenLocation!.latitude,
-              citizenLocation!.longitude,
-              vehicleLocation!.latitude,
-              vehicleLocation!.longitude,
-            );
-
-            if (distance <= 0.3 && !notificationSent) {
-              _showNotification(key.toString(), distance);
-              notificationSent = true;
-            }
+            setState(() {
+              _latestVehicleId = key.toString();
+              _latestVehicleLocation = LatLng(lat, lng);
+            });
+            _evaluateProximity();
           }
         });
       }
     });
+  }
+
+  void _evaluateProximity() {
+    if (citizenLocation == null || _latestVehicleLocation == null) {
+      return;
+    }
+
+    final distance = _calculateDistance(
+      citizenLocation!.latitude,
+      citizenLocation!.longitude,
+      _latestVehicleLocation!.latitude,
+      _latestVehicleLocation!.longitude,
+    );
+
+    if (distance <= 0.3) {
+      if (!notificationSent && _latestVehicleId != null) {
+        _showNotification(_latestVehicleId!, distance);
+        notificationSent = true;
+      }
+    } else if (notificationSent) {
+      notificationSent = false;
+    }
   }
 
   double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
@@ -113,10 +129,10 @@ class _CitizenPageState extends State<CitizenPage> {
         child: citizenLocation == null
             ? const CircularProgressIndicator()
             : Text(
-          "Citizen Location: ${citizenLocation!.latitude}, ${citizenLocation!.longitude}\n"
-              "Vehicle Location: ${vehicleLocation?.latitude}, ${vehicleLocation?.longitude}",
-          textAlign: TextAlign.center,
-        ),
+                "Citizen Location: ${citizenLocation!.latitude}, ${citizenLocation!.longitude}\n"
+                "Vehicle Location: ${_latestVehicleLocation?.latitude}, ${_latestVehicleLocation?.longitude}",
+                textAlign: TextAlign.center,
+              ),
       ),
     );
   }
