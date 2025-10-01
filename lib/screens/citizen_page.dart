@@ -49,6 +49,7 @@ class _CitizenPageState extends State<CitizenPage> {
             (data["lng"] as num).toDouble(),
           );
         });
+        _evaluateProximity();
       }
     });
   }
@@ -57,32 +58,43 @@ class _CitizenPageState extends State<CitizenPage> {
     FirebaseDatabase.instance.ref("vehicles").onValue.listen((event) {
       final data = event.snapshot.value as Map<dynamic, dynamic>?;
 
-      if (data != null && citizenLocation != null) {
+      if (data != null) {
         data.forEach((key, value) {
           if (value["location"] != null) {
             final lat = (value["location"]["lat"] as num).toDouble();
             final lng = (value["location"]["lng"] as num).toDouble();
-            vehicleLocation = LatLng(lat, lng);
-
-            final distance = _calculateDistance(
-              citizenLocation!.latitude,
-              citizenLocation!.longitude,
-              vehicleLocation!.latitude,
-              vehicleLocation!.longitude,
-            );
-
-            if (distance <= 0.3 && !notificationSent) {
-              _showNotification(key.toString(), distance);
-              notificationSent = true;
-            }
+            setState(() {
+              vehicleLocation = LatLng(lat, lng);
+            });
+            _evaluateProximity(vehicleId: key.toString());
           }
         });
       }
     });
   }
 
+  void _evaluateProximity({String? vehicleId}) {
+    if (citizenLocation == null || vehicleLocation == null) {
+      return;
+    }
+
+    final distance = _calculateDistance(
+      citizenLocation!.latitude,
+      citizenLocation!.longitude,
+      vehicleLocation!.latitude,
+      vehicleLocation!.longitude,
+    );
+
+    if (distance <= 100 && !notificationSent) {
+      _showNotification(vehicleId ?? 'Vehicle', distance);
+      notificationSent = true;
+    } else if (distance > 100) {
+      notificationSent = false;
+    }
+  }
+
   double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-    return Geolocator.distanceBetween(lat1, lon1, lat2, lon2) / 1000;
+    return Geolocator.distanceBetween(lat1, lon1, lat2, lon2);
   }
 
   Future<void> _showNotification(String vehicleId, double distance) async {
@@ -98,7 +110,7 @@ class _CitizenPageState extends State<CitizenPage> {
     await _notifications.show(
       0,
       'Garbage Truck Nearby',
-      'Truck $vehicleId is ${(distance * 1000).toStringAsFixed(0)} meters away!',
+      'Truck $vehicleId is ${distance.toStringAsFixed(0)} meters away!',
       details,
     );
   }
