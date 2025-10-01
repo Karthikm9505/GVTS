@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "342324292557",
+    "project_id": "garbagevehicletrackingsystem",
+    "storage_bucket": "garbagevehicletrackingsystem.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:342324292557:android:dd559cb9c1909f5610b284",
+        "android_client_info": {
+          "package_name": "com.example.gvts_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBdl6tU3Fh7TK2DYZIC3CCiREJUrFp7XF4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
